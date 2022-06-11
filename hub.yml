@@ -1,0 +1,323 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: CFN template for sharing VPC endpoints - Hub account
+
+Parameters:
+
+  pOrganizationId:
+    Type: String
+    Description: Organisation ID
+
+  pMasterAccountId:
+    Type: String
+    Description: Account ID for hub account
+
+Resources:
+
+  rVpc:
+    Type: AWS::EC2::VPC
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W60
+            reason: "VPC flog log not required in sample VPC, not for production usage"
+    Properties:
+      CidrBlock: 10.0.0.0/22
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: "Name"
+          Value: !Join
+            - '-'
+            - - !Ref AWS::StackName
+
+  rSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref rVpc
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: ""
+      CidrBlock: "10.0.0.0/24"
+      Tags:
+        - Key: "Name"
+          Value: !Join
+            - '-'
+            - - !Ref AWS::StackName
+              - "private-1"
+
+  rSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref rVpc
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: ""
+      CidrBlock: "10.0.1.0/24"
+      Tags:
+        - Key: "Name"
+          Value: !Join
+            - '-'
+            - - !Ref AWS::StackName
+              - "private-2"
+
+  rSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref rVpc
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+          - 2
+          - Fn::GetAZs: ""
+      CidrBlock: "10.0.2.0/24"
+      Tags:
+        - Key: "Name"
+          Value: !Join
+            - '-'
+            - - !Ref AWS::StackName
+              - "private-3"
+
+  rSecurityGroupServiceEndpoints:
+    Type: AWS::EC2::SecurityGroup
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W9
+            reason: "Ingress is required from all VPCs attached to TGW"
+    Properties:
+      GroupDescription: Security Group for VPC Endpoints
+      SecurityGroupIngress:
+        - Description: Allowing HTTPs Traffic
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: "10.0.0.0/21"
+      SecurityGroupEgress:
+        - Description: Allowing HTTPs Traffic
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: "10.0.0.0/21"
+      VpcId: !Ref rVpc
+
+  rKMSEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PrivateDnsEnabled: True
+      SecurityGroupIds:
+        - !Ref rSecurityGroupServiceEndpoints
+      ServiceName: !Join [ '.', [ 'com', 'amazonaws', !Ref 'AWS::Region', 'kms']]
+      SubnetIds:
+        - !Ref rSubnet1
+        - !Ref rSubnet2
+        - !Ref rSubnet3
+      VpcEndpointType: Interface
+      VpcId: !Ref rVpc
+
+  rSSMMessagesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PrivateDnsEnabled: True
+      SecurityGroupIds:
+        - !Ref rSecurityGroupServiceEndpoints
+      ServiceName: !Join [ '.', [ 'com', 'amazonaws', !Ref 'AWS::Region', 'ssmmessages']]
+      SubnetIds:
+        - !Ref rSubnet1
+        - !Ref rSubnet2
+        - !Ref rSubnet3
+      VpcEndpointType: Interface
+      VpcId: !Ref rVpc
+
+  rSSMEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PrivateDnsEnabled: True
+      SecurityGroupIds:
+        - !Ref rSecurityGroupServiceEndpoints
+      ServiceName: !Join [ '.', [ 'com', 'amazonaws', !Ref 'AWS::Region', 'ssm']]
+      SubnetIds:
+        - !Ref rSubnet1
+        - !Ref rSubnet2
+        - !Ref rSubnet3
+      VpcEndpointType: Interface
+      VpcId: !Ref rVpc
+
+  rEC2MessagesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PrivateDnsEnabled: True
+      SecurityGroupIds:
+        - !Ref rSecurityGroupServiceEndpoints
+      ServiceName: !Join [ '.', [ 'com', 'amazonaws', !Ref 'AWS::Region', 'ec2messages']]
+      SubnetIds:
+        - !Ref rSubnet1
+        - !Ref rSubnet2
+        - !Ref rSubnet3
+      VpcEndpointType: Interface
+      VpcId: !Ref rVpc
+
+
+  rRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref rVpc
+      Tags:
+        - Key: "Name"
+          Value: !Join
+            - '-'
+            - - !Ref AWS::StackName
+              - 'private-1'
+
+  rRouteSpoke:
+    Type: "AWS::EC2::Route"
+    DependsOn:
+        - "rTgwAttach"
+    Properties:
+        RouteTableId: !Ref rRouteTable1
+        DestinationCidrBlock: "10.0.4.0/24"
+        TransitGatewayId: !Ref rTgw
+
+
+  rTgwAttach:
+    Type: "AWS::EC2::TransitGatewayAttachment"
+    Properties:
+      VpcId: !Ref rVpc
+      TransitGatewayId: !Ref rTgw
+      SubnetIds:
+          - !Ref rSubnet1
+          - !Ref rSubnet2
+          - !Ref rSubnet3
+
+  rRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref rRouteTable1
+      SubnetId: !Ref rSubnet1
+
+  rRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref rRouteTable1
+      SubnetId: !Ref rSubnet2
+
+  rRouteTableAssociation3:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref rRouteTable1
+      SubnetId: !Ref rSubnet3
+
+  ##########
+  # START RESOLVER CONFIGURATION
+  # the below can be taken and applied to "Existing" shared service vpcs to extend functionality
+  ##########
+
+  rSecurityGroupResolvers:
+    Type: AWS::EC2::SecurityGroup
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W9
+            reason: "Ingress is required from all VPCs attached to TGW"
+    Properties:
+      GroupDescription: Security Group for Resolvers
+      SecurityGroupIngress:
+        - Description: Allowing UDP DNS Traffic
+          IpProtocol: udp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: "10.0.0.0/21"
+        - Description: Allowing TCP DNS Traffic
+          IpProtocol: tcp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: "10.0.0.0/21"
+      SecurityGroupEgress:
+        - Description: Allowing DNS Traffic
+          IpProtocol: udp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: "10.0.0.0/21"
+        - Description: Allowing DNS Traffic
+          IpProtocol: tcp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: "10.0.0.0/21"
+      VpcId: !Ref rVpc
+
+  rInboundResolver:
+    Type: AWS::Route53Resolver::ResolverEndpoint
+    Properties:
+      Direction: INBOUND
+      IpAddresses:
+        - Ip: 10.0.0.53
+          SubnetId: !Ref rSubnet1
+        - Ip: 10.0.1.53
+          SubnetId: !Ref rSubnet2
+        - Ip: 10.0.2.53
+          SubnetId: !Ref rSubnet3
+      SecurityGroupIds:
+        - !Ref rSecurityGroupResolvers
+
+  rOutboundResolver:
+    Type: AWS::Route53Resolver::ResolverEndpoint
+    Properties:
+      Direction: OUTBOUND
+      IpAddresses:
+        - SubnetId: !Ref rSubnet1
+        - SubnetId: !Ref rSubnet2
+        - SubnetId: !Ref rSubnet3
+      SecurityGroupIds:
+        - !Ref rSecurityGroupResolvers
+
+  rAWSApiResolverRule:
+    Type: AWS::Route53Resolver::ResolverRule
+    Properties:
+      DomainName: !Sub "${AWS::Region}.amazonaws.com"
+      RuleType: FORWARD
+      Name: amazonaws
+      ResolverEndpointId:
+        Ref: rOutboundResolver
+      TargetIps:
+        - Ip: 10.0.0.53
+        - Ip: 10.0.1.53
+        - Ip: 10.0.2.53
+
+  rRamShareAWSResolverRule:
+    Type: "AWS::RAM::ResourceShare"
+    Properties:
+      Name: "Route53 Resolver Rules Organizational Share"
+      AllowExternalPrincipals: false
+      ResourceArns:
+        - !GetAtt rAWSApiResolverRule.Arn
+      Principals:
+        - !Sub arn:aws:organizations::${pMasterAccountId}:organization/${pOrganizationId}
+
+  rTgw:
+    Type: "AWS::EC2::TransitGateway"
+    Properties:
+      AutoAcceptSharedAttachments: enable
+      DefaultRouteTableAssociation: enable
+      DefaultRouteTablePropagation: enable
+
+  rTgwShare:
+    Type: "AWS::RAM::ResourceShare"
+    Properties:
+      Name: "TGW Organizational Share"
+      AllowExternalPrincipals: false
+      ResourceArns:
+        -
+          !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:transit-gateway/${rTgw}
+      Principals:
+        - !Sub arn:aws:organizations::${pMasterAccountId}:organization/${pOrganizationId}
+
+
+Outputs:
+  oAWSApiResolverRule:
+    Value: !Ref rAWSApiResolverRule
+
+  oTgwId:
+    Value: !Ref rTgw

@@ -1,0 +1,221 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: CFN template for sharing VPC endpoints - Spoke account
+
+Parameters:
+
+  pAWSApiResolverRuleId:
+    Type: String
+    Description: Rule Id from the hub account outputs
+
+  pTgw:
+    Type: String
+    Description: TGW Id from the hub account outputs
+
+  pSsmImage:
+    Type: "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>"
+    Default: "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2"
+    Description: AMI Id for test instance
+
+
+Resources:
+
+  rVpc:
+    Type: AWS::EC2::VPC
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W60
+            reason: "VPC flog log not required in sample VPC, not for production usage"
+    Properties:
+      CidrBlock: "10.0.4.0/24"
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: "Name"
+          Value: !Join
+            - '-'
+            - - !Ref AWS::StackName
+
+  rSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref rVpc
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: ""
+      CidrBlock: "10.0.4.0/26"
+      Tags:
+        - Key: "Name"
+          Value: !Join
+            - '-'
+            - - !Ref AWS::StackName
+              - "private-1"
+
+  rSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref rVpc
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: ""
+      CidrBlock: "10.0.4.64/26"
+      Tags:
+        - Key: "Name"
+          Value: !Join
+            - '-'
+            - - !Ref AWS::StackName
+              - "private-2"
+
+  rSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref rVpc
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+          - 2
+          - Fn::GetAZs: ""
+      CidrBlock: "10.0.4.128/26"
+      Tags:
+        - Key: "Name"
+          Value: !Join
+            - '-'
+            - - !Ref AWS::StackName
+              - "private-3"
+
+  rTgwAttach:
+    Type: "AWS::EC2::TransitGatewayAttachment"
+    Properties:
+      VpcId: !Ref rVpc
+      TransitGatewayId: !Ref pTgw
+      SubnetIds:
+          - !Ref rSubnet1
+          - !Ref rSubnet2
+          - !Ref rSubnet3
+
+  rRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref rVpc
+      Tags:
+        - Key: "Name"
+          Value: !Join
+            - '-'
+            - - !Ref AWS::StackName
+              - 'private'
+
+  rRouteEndpoints:
+    Type: "AWS::EC2::Route"
+    DependsOn:
+      - "rTgwAttach"
+    Properties:
+        RouteTableId: !Ref rRouteTable1
+        DestinationCidrBlock: "10.0.0.0/22"
+        TransitGatewayId: !Ref pTgw
+
+  rRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref rRouteTable1
+      SubnetId: !Ref rSubnet1
+
+  rRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref rRouteTable1
+      SubnetId: !Ref rSubnet2
+
+  rRouteTableAssociation3:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref rRouteTable1
+      SubnetId: !Ref rSubnet3
+
+  rS3VpcGatewayEndpoint:
+    Type: "AWS::EC2::VPCEndpoint"
+    Properties:
+      ServiceName: !Join [ '.', [ 'com', 'amazonaws', !Ref 'AWS::Region', 's3']]
+      RouteTableIds:
+        - !Ref rRouteTable1
+      VpcEndpointType: Gateway
+      VpcId: !Ref rVpc
+
+
+  rAWSApiResolverRuleAssociation:
+    Type: "AWS::Route53Resolver::ResolverRuleAssociation"
+    Properties:
+      Name: AWSApis
+      ResolverRuleId: !Ref pAWSApiResolverRuleId
+      VPCId: !Ref rVpc
+
+  rInstanceRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "ec2.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+          - "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+
+  rInstanceSg:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: All Egress
+      SecurityGroupEgress:
+          - IpProtocol: tcp
+            Description: Allow dns (tcp) - .2 resolver
+            FromPort: 53
+            ToPort: 53
+            CidrIp: "10.0.4.2/32"
+          - IpProtocol: udp
+            Description: Allow dns (udp) - .2 resolver
+            FromPort: 53
+            ToPort: 53
+            CidrIp: "10.0.4.2/32"
+          - IpProtocol: tcp
+            Description: Allow dns (tcp) - .253 resolver
+            FromPort: 53
+            ToPort: 53
+            CidrIp: "169.254.169.253/32"
+          - IpProtocol: udp
+            Description: Allow dns (udp) - .253 resolver
+            FromPort: 53
+            ToPort: 53
+            CidrIp: "169.254.169.253/32"
+      VpcId: !Ref rVpc
+
+  rInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Roles:
+        -
+          !Ref rInstanceRole
+
+  rInstacnce:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      Tags:
+        - Key: Name
+          Value: VPC-Endpoint-Sharing
+      IamInstanceProfile: !Ref rInstanceProfile
+      InstanceType: t3.nano
+      SecurityGroupIds:
+        -
+          !GetAtt rInstanceSg.GroupId
+      SubnetId: !Ref rSubnet1
+      ImageId: !Ref pSsmImage
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: ""
