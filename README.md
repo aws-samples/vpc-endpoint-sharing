@@ -4,11 +4,11 @@ The pattern describes how to setup VPC Endpoints within a shared services VPC, c
 
 ### Architecture
 
-![Architecture](architecture.jpg)
+![Architecture](architecture.png)
 
 ### AWS Service Request flow
 
-![Flow](flow.jpg)
+![Flow](flow.png)
 
 ## Prerequisites and limitations
 ### Prerequisites
