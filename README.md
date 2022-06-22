@@ -2,8 +2,13 @@
 
 The pattern describes how to setup VPC Endpoints within a shared services VPC, create corresponding Route53 Resolver rules and share them to all connected VPCs.
 
+### Architecture
 
-![Overview](view.jpg)
+![Architecture](architecture.png)
+
+### AWS Service Request flow
+
+![Flow](flow.png)
 
 ## Prerequisites and limitations
 ### Prerequisites
