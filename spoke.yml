@@ -16,7 +16,6 @@ Parameters:
     Default: "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2"
     Description: AMI Id for test instance
 
-
 Resources:
 
   rVpc:
@@ -202,7 +201,7 @@ Resources:
         -
           !Ref rInstanceRole
 
-  rInstacnce:
+  rInstance:
     Type: "AWS::EC2::Instance"
     Properties:
       Tags:
