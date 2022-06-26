@@ -167,11 +167,41 @@ Resources:
       ManagedPolicyArns:
           - "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 
+  rInstancePolicy:
+    Type: "AWS::IAM::Policy"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W12
+            reason: "policy used for testing purposes, should not be used in production"
+    Properties:
+      PolicyName: "shared-vpc-endpoint-test-perms"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'sns:ListTopics'
+              - 'ssm:ListDocuments'
+            Resource: '*'
+      Roles:
+        - !Ref rInstanceRole
+
   rInstanceSg:
     Type: "AWS::EC2::SecurityGroup"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W5
+            reason: "security group used for testing purposes, should not be used in production"
     Properties:
       GroupDescription: All Egress
       SecurityGroupEgress:
+          - IpProtocol: tcp
+            Description: Allow communication with public and private HTTPS endpoints
+            FromPort: 443
+            ToPort: 443
+            CidrIp: "0.0.0.0/0"
           - IpProtocol: tcp
             Description: Allow dns (tcp) - .2 resolver
             FromPort: 53
@@ -198,8 +228,7 @@ Resources:
     Type: "AWS::IAM::InstanceProfile"
     Properties:
       Roles:
-        -
-          !Ref rInstanceRole
+        - !Ref rInstanceRole
 
   rInstance:
     Type: "AWS::EC2::Instance"
@@ -210,8 +239,7 @@ Resources:
       IamInstanceProfile: !Ref rInstanceProfile
       InstanceType: t3.nano
       SecurityGroupIds:
-        -
-          !GetAtt rInstanceSg.GroupId
+        - !GetAtt rInstanceSg.GroupId
       SubnetId: !Ref rSubnet1
       ImageId: !Ref pSsmImage
       AvailabilityZone:
