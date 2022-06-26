@@ -169,6 +169,11 @@ Resources:
 
   rInstancePolicy:
     Type: "AWS::IAM::Policy"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W12
+            reason: "policy used for testing purposes, should not be used for production purposes"
     Properties:
       PolicyName: "shared-vpc-endpoint-test-perms"
       PolicyDocument:
@@ -184,6 +189,11 @@ Resources:
 
   rInstanceSg:
     Type: "AWS::EC2::SecurityGroup"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W5
+            reason: "security group used for testing purposes, should not be used for production purposes"
     Properties:
       GroupDescription: All Egress
       SecurityGroupEgress:
