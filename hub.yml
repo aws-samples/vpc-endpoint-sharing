@@ -160,7 +160,6 @@ Resources:
       VpcEndpointType: Interface
       VpcId: !Ref rVpc
 
-
   rRouteTable1:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -180,7 +179,6 @@ Resources:
         RouteTableId: !Ref rRouteTable1
         DestinationCidrBlock: "10.0.4.0/24"
         TransitGatewayId: !Ref rTgw
-
 
   rTgwAttach:
     Type: "AWS::EC2::TransitGatewayAttachment"
@@ -314,8 +312,8 @@ Resources:
       Principals:
         - !Sub arn:aws:organizations::${pMasterAccountId}:organization/${pOrganizationId}
 
-
 Outputs:
+
   oAWSApiResolverRule:
     Value: !Ref rAWSApiResolverRule
 
