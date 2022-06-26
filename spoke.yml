@@ -173,7 +173,7 @@ Resources:
       cfn_nag:
         rules_to_suppress:
           - id: W12
-            reason: "policy used for testing purposes, should not be used for production purposes"
+            reason: "policy used for testing purposes, should not be used in production"
     Properties:
       PolicyName: "shared-vpc-endpoint-test-perms"
       PolicyDocument:
@@ -193,7 +193,7 @@ Resources:
       cfn_nag:
         rules_to_suppress:
           - id: W5
-            reason: "security group used for testing purposes, should not be used for production purposes"
+            reason: "security group used for testing purposes, should not be used in production"
     Properties:
       GroupDescription: All Egress
       SecurityGroupEgress:
